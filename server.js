@@ -1,11 +1,13 @@
-import express from 'express';
-import Database from 'better-sqlite3';
+const express = require('express');
+const Database = require('better-sqlite3');
 
 const app = express();
 
 app.use(express.json());
 
 app.get('/', (req, res) => {
+  console.log('clients:',clients) ;
+
   return res.status(200).send({'message': 'SHIPTIVITY API. Read documentation to see API docs'});
 });
 
@@ -114,23 +116,41 @@ app.get('/api/v1/clients/:id', (req, res) => {
  *      priority (optional): integer,
  *
  */
-app.put('/api/v1/clients/:id', (req, res) => {
+app.get('/api/v1/clients/:id', (req, res) => {
   const id = parseInt(req.params.id , 10);
   const { valid, messageObj } = validateId(id);
   if (!valid) {
     res.status(400).send(messageObj);
   }
 
-  let { status, priority } = req.body;
+  let { statusChange, priority } = req.body;
   let clients = db.prepare('select * from clients').all();
   const client = clients.find(client => client.id === id);
 
   /* ---------- Update code below ----------*/
-
-
-
+  const {validPriority, messageObjPriority} = validatePriority(priority) ; 
+  if (!validPriority){
+    res.status(400).send(messageObjPriority)
+  }
+  //did it change status?
+  //1 - Update status of id id
+  console.log('clients:',clients) ;
+  if (statusChange !== 'backlog' && sstatusChange !== 'in-progress' && statusChange !== 'complete') {
+    return res.status(400).send({
+      message:'In valid status',
+      long_message:'status can only be [backlog | in-progress | complete]' 
+    }) ;
+  }
+  else{
+    
+  }
+  //
+  //0 do nothing
+  console.log('no change') ;
   return res.status(200).send(clients);
 });
 
 app.listen(3001);
 console.log('app running on port ', 3001);
+
+// module.exports = app ;
