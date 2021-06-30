@@ -1,5 +1,6 @@
 const express = require('express');
 const Database = require('better-sqlite3');
+const { Router } = require('express');
 
 const app = express();
 
@@ -53,7 +54,7 @@ const validateId = (id) => {
  * @param {any} priority
  */
 const validatePriority = (priority) => {
-  if (Number.isNaN(priority)) {
+  if (Number.isNaN(priority)|| priority<1) {
     return {
       valid: false,
       messageObj: {
@@ -116,38 +117,101 @@ app.get('/api/v1/clients/:id', (req, res) => {
  *      priority (optional): integer,
  *
  */
-app.get('/api/v1/clients/:id', (req, res) => {
+app.put('/api/v1/clients/:id', (req, res) => {
   const id = parseInt(req.params.id , 10);
   const { valid, messageObj } = validateId(id);
   if (!valid) {
     res.status(400).send(messageObj);
   }
 
-  let { statusChange, priority } = req.body;
-  let clients = db.prepare('select * from clients').all();
+  let {status, priority } = req.body;
+  let clients = db.prepare('select * from clients order by priority').all();
   const client = clients.find(client => client.id === id);
 
   /* ---------- Update code below ----------*/
-  const {validPriority, messageObjPriority} = validatePriority(priority) ; 
-  if (!validPriority){
-    res.status(400).send(messageObjPriority)
-  }
-  //did it change status?
-  //1 - Update status of id id
-  console.log('clients:',clients) ;
-  if (statusChange !== 'backlog' && sstatusChange !== 'in-progress' && statusChange !== 'complete') {
-    return res.status(400).send({
-      message:'In valid status',
-      long_message:'status can only be [backlog | in-progress | complete]' 
-    }) ;
-  }
-  else{
-    
-  }
-  //
-  //0 do nothing
-  console.log('no change') ;
-  return res.status(200).send(clients);
+    //did it change status?
+    //0 do nothing
+    console.log('here', req.body)
+    // console.log('clients:',clients) ;
+    const statusChange = status ;
+    if (statusChange!== undefined && statusChange !== 'backlog' && statusChange !== 'in-progress' && statusChange !== 'complete') {
+      return res.status(400).send({
+        message:'In valid status',
+        long_message:'status can only be [backlog | in-progress | complete]' 
+      }) ;
+    } //wrong word on status
+    else if (statusChange === undefined){
+      console.log('no change') ;
+      return res.status(200).send(clients);
+    }//status does not exist
+    //1 - Update status of id id
+    // else
+    //
+    //priority after input? with input ?
+    const parsedPriority = priority === undefined ? priority: parseInt(priority,10);
+    var {valid:validatedPriority,messageObj:msg} = validatePriority(parsedPriority) ;
+    if (!validatedPriority){
+      //not valid priority
+      return res.status(400).send({
+        messageObj:msg
+      }) ;
+    }
+
+    if (statusChange === client.status){
+      //no change in location
+      //priority?
+      if (parsedPriority === client.priority || parsedPriority === undefined){
+        // no change 
+        console.log('no change') ;
+        return res.status(200).send(clients);
+      }
+      else if (parsedPriority<client.priority){
+      
+        //get all in order of priority
+        //update all in the criteria - * great than updated one in status lane
+        const runUpdate = db.prepare('update clients set priority=? where status = ? and id = ?').run(parsedPriority,statusChange,id);
+        const trigger = db.prepare('update clients set priority = priority + 1 where priority >= ? and status = ? and id != ? ').run(parsedPriority,statusChange,id) ;
+        console.log(runUpdate,'Triger ... Move Up',trigger) ; 
+        // if (runUpdate.changes < 0){
+          
+        // }
+      }
+      else{
+        // update ones less than
+        const runUpdate = db.prepare('update clients set priority=? where status = ? and id = ?').run(parsedPriority,statusChange,id);
+        const trigger = db.prepare('update clients set priority = priority - 1 where priority <= ? and status = ? and id != ? ').run(parsedPriority,statusChange,id) ;
+        console.log(runUpdate,'Triger ... Move Down',trigger) ; 
+
+      }
+      const updatedClients = db.prepare('select * from clients').all();
+      // const updatedClients = db.prepare('select * from clients where status = ? order by priority').all(statusChange);
+      // console.log(' changes ',updatedClients) ;
+
+      return res.status(200).send(updatedClients);
+
+    }
+    else{
+      // changes in location
+      // at the bottom
+      const lenOfStatus = db.prepare('select* from clients where status=?').all(statusChange).length ;
+      // console.log('length: ',lenOfStatus)
+      if ( parsedPriority === undefined || parsedPriority > lenOfStatus){
+          const addToNew = db.prepare('update clients set status = ? , priority = ? where id = ? ').run(statusChange,lenOfStatus+1,id) ; 
+          console.log('info of update',addToNew) ;
+      }
+      //desired location
+      const runUpdate = db.prepare('update clients set priority=? where status = ? and id = ?').run(parsedPriority,statusChange,id);
+      const trigger = db.prepare('update clients set priority = priority + 1 where priority >= ? and status = ? and id != ? ').run(parsedPriority,statusChange,id) ;
+      // console.log(runUpdate,'Triger ... Move Up',trigger) ; 
+  
+
+      const updatedClients = db.prepare('select * from clients').all(statusChange);
+      // console.log('major changes ',updatedClients) ;
+
+      return res.status(200).send(updatedClients);
+
+    }
+
 });
 
 app.listen(3001);
